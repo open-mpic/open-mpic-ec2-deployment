@@ -3,6 +3,8 @@ tmp/
 conrig.yaml
 
 open-tofu/.terraform/
+*.tfstate
+*.tfstate.backup
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
