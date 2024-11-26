@@ -1,6 +1,6 @@
 keys/
 tmp/
-conrig.yaml
+config.yaml
 
 open-tofu/.terraform/
 *.tfstate
