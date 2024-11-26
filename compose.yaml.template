@@ -1,0 +1,30 @@
+services:
+  fastapi:
+    build:
+      context: "fast-api-test"
+    environment:
+      perspective_names: "arin.test1|apnic.test2"
+      dcv_service_names: "test1dcv|test2dcv"
+      caa_service_names: "test1caa|test2caa"
+      default_perspective_count: "2"
+      enforce_distinct_rir_regions: "1"
+      hash_secret: "abc"
+    ports:
+    - "80:80/tcp"
+  fastapi-dcv:
+    build:
+      context: "fast-api-dcv"
+    environment:
+      rir_region: "arin"
+      code: "test1"
+    ports:
+    - "81:80/tcp"
+  fastapi-caa:
+    build:
+      context: "fast-api-caa"
+    environment:
+      rir_region: "arin"
+      code: "test1"
+      default_caa_domains: "caatestsuite.com"
+    ports:
+    - "82:80/tcp"
