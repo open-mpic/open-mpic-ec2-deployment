@@ -1,4 +1,8 @@
 keys/
+tmp/
+conrig.yaml
+
+open-tofu/.terraform/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
