@@ -50,3 +50,10 @@ time curl -H 'Content-Type: application/json' \
       -X POST \
       "https://1-2-3-4.mpic.example.com/mpic"
 ``
+
+# Teardown
+If you are done using the MPIC service:
+
+`cd open-tofu`
+
+`tofu destroy -auto-approve`
