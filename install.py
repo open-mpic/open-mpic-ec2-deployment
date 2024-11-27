@@ -10,6 +10,9 @@ import get_ips
 import ssh_utils
 import time
 
+import traceback
+
+
 
 def parse_args(raw_args):
     parser = argparse.ArgumentParser()
@@ -18,6 +21,8 @@ def parse_args(raw_args):
                         default=f"{dirname}/config.yaml")
     parser.add_argument("-a", "--aws_region_config",
                         default=f"{dirname}/aws_region_config.yaml")
+    parser.add_argument("-k", "--api_key_file",
+                        default=f"{dirname}/keys/api.key")
     parser.add_argument("-f", "--tf_state",
                         default=f"{dirname}/open-tofu/terraform.tfstate")
     parser.add_argument("-i", "--identity_file",
@@ -55,6 +60,10 @@ def main(raw_args=None):
             print(f"Error loading YAML config at {args.aws_region_config}. Project not configured. Error details: {exec}.")
             exit()
 
+    api_key = None
+    with open(args.api_key_file) as f:
+        api_key = f.read().strip()
+    
     remotes = get_ips.extract_ips(args.tf_state)
 
     for ip in remotes:
@@ -82,7 +91,7 @@ def main(raw_args=None):
 
 
     # Install nginx
-    #ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo apt install -y nginx")
+    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo apt install -y nginx")
 
     # Disable default site.
     ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo rm /etc/nginx/sites-enabled/default")
@@ -95,6 +104,7 @@ def main(raw_args=None):
         for ip in remotes:
             nginx_template_string_region = nginx_template_string[:]
             nginx_template_string_region = nginx_template_string_region.replace("{{public-dns}}", remotes[ip]['dns'])
+            nginx_template_string_region = nginx_template_string_region.replace("{{api-key}}", api_key)
             conf_file_path = args.tmp_dir + f"/mpic-site-{remotes[ip]['dns']}.conf"
             with open(conf_file_path, 'w') as conf_file:
                 conf_file.write(nginx_template_string_region)
@@ -107,9 +117,10 @@ def main(raw_args=None):
 
     ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo ln -s /snap/bin/certbot /usr/bin/certbot")
     
-
-    for ip in remotes:
-        ssh_utils.run_cmd_at_remote(ip, args.identity_file, f"sudo certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email -d {remotes[ip]['dns']}")
+    cmds = []
+    for ip in ips:
+        cmds.append(f"sudo certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email -d {remotes[ip]['dns']}")
+    ssh_utils.run_cmds_at_remotes(ips, args.identity_file, cmds)
 
 
     with open(args.docker_compose_template_file) as stream:
@@ -124,12 +135,13 @@ def main(raw_args=None):
         perspective_names = "|".join(perspectives)
         for perspective in perspectives:
             domain = [remotes[ip]['dns'] for ip in remotes if remotes[ip]['region'] == perspective][0]
-            dcv_endpoints.append({"url": f"https://{domain}/dcv"})
-            caa_endpoints.append({"url": f"https://{domain}/caa"})
+            dcv_endpoints.append([{"url": f"https://{domain}/dcv", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}}])
+            caa_endpoints.append([{"url": f"https://{domain}/caa", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}}])
         
         dcv_endpoints_json = json.dumps(dcv_endpoints)
         caa_endpoints_json = json.dumps(caa_endpoints)
-
+        print(dcv_endpoints_json)
+        print(caa_endpoints_json)
         for ip in remotes:
             docker_compose_template_string_region = docker_compose_template[:]
 
@@ -158,7 +170,9 @@ def main(raw_args=None):
                 f.write(docker_compose_template_string_region)
             ssh_utils.copy_file_to_remote(filename, "/home/ubuntu/compose.yaml", ip, args.identity_file)
     ssh_utils.copy_file_to_remotes(ips, args.aws_region_config, "/home/ubuntu/available_perspectives.yaml", args.identity_file)
-    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo docker compose up -d")
+
+    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo docker compose down")
+    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo docker compose up --build --force-recreate --no-deps -d")
     ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo service nginx reload")
 
 

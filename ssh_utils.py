@@ -83,6 +83,19 @@ def run_cmd_at_remotes(remote_ips, keyfile, cmd):
 	for t in thread_list:
 		t.join()
 	return cmd_results
+
+# Run different cmds at each remote.
+def run_cmds_at_remotes(remote_ips, keyfile, cmds):
+	global cmd_results
+	cmd_results = {}
+	thread_list = []
+	for i in range(len(remote_ips)):
+		thread_list.append(threading.Thread(target=run_cmd_at_remote, args=(remote_ips[i], keyfile, cmds[i])))
+	for t in thread_list:
+		t.start()
+	for t in thread_list:
+		t.join()
+	return cmd_results
 		
 def copy_file_to_remotes(remote_ips, local_path, remote_path, keyfile):
 	global cmd_results

@@ -12,7 +12,7 @@ def parse_args(raw_args):
 
     parser.add_argument("-t", "--tf_state",
                         default=f"{dirname}/open-tofu/terraform.tfstate")
-    parser.add_argument("-s", "--dns_suffix")
+    parser.add_argument("-s", "--dns_suffix", default="")
     return parser.parse_args(raw_args)
 
 

@@ -19,6 +19,8 @@ def parse_args(raw_args):
                         default=f"{dirname}/open-tofu/main.tf.template")
     parser.add_argument("-a", "--aws_perspective_tf_template",
                         default=f"{dirname}/open-tofu/aws-ec2-perspective.tf.template")
+    parser.add_argument("-k", "--api_key_file",
+                        default=f"{dirname}/keys/api.key")
     parser.add_argument("-p", "--aws_provider_tf_template",
                         default=f"{dirname}/open-tofu/aws-provider.tf.template")
     parser.add_argument("-d", "--deployment_id_file",
@@ -128,61 +130,14 @@ def main(raw_args=None):
                 out_stream.write(aws_perspective_tf_region)
 
 
+    # Get API Key
+        
+    if not os.path.isfile(args.api_key_file):
+        with open(args.api_key_file, 'w') as f:
+            api_key_generated = ''.join(secrets.choice(string.ascii_letters) for i in range(30))
+            f.write(api_key_generated)
+
     return
-
-
-
-        # Generate "main.generated.tf" based on main.tf.template.
-    with open(args.main_tf_template) as stream:
-        # Read the template file to a string.
-        main_tf_string = stream.read()
-
-        # Replace all the template vars used in the file.
-        main_tf_string = main_tf_string.replace("{{api-region}}", config['api-region'])
-        main_tf_string = main_tf_string.replace("{{deployment-id}}", str(deployment_id))
-        
-        # Generate the region name list.
-        perspective_names_list = "|".join(config['perspectives'])
-        # Note the substitution uses quotes around the var.
-        main_tf_string = main_tf_string.replace("{{perspective-names-list}}", f"\"{perspective_names_list}\"")
-        
-        # Generate the ARNs list for validators. Note that this is not a list of actual ARN values. It is just a list of ARN names that will be substituted by Open Tofu.
-        arn_validator_list = "|".join([f"${{aws_lambda_function.mpic_dcv_checker_lambda_{region}.arn}}" for region in regions])
-        main_tf_string = main_tf_string.replace("{{validator-arns-list}}", f"\"{arn_validator_list}\"")
-        
-        # Generate the ARNs list for CAA resolvers. Note that this is not a list of actual ARN values. It is just a list of ARN names that will be substituted by Open Tofu.
-        arn_mpic_caa_checker_list = "|".join([f"${{aws_lambda_function.mpic_caa_checker_lambda_{region}.arn}}" for region in regions])
-        main_tf_string = main_tf_string.replace("{{mpic-caa-checker-arns-list}}", f"\"{arn_mpic_caa_checker_list}\"")
-
-        # Replace default perspective count.
-        main_tf_string = main_tf_string.replace("{{default-perspective-count}}", f"\"{config['default-perspective-count']}\"")
-
-        # Replace absolout max attempt count if present.
-        if "absolute-max-attempts" in config:
-            main_tf_string = main_tf_string.replace("{{absolut-max-attempts-with-key}}", f"absolute_max_attempts = \"{config['absolute-max-attempts']}\"")
-        else:
-            main_tf_string = main_tf_string.replace("{{absolut-max-attempts-with-key}}", "")
-            
-
-        # Replace enforce distinct rir regions.
-        main_tf_string = main_tf_string.replace("{{enforce-distinct-rir-regions}}", f"\"{1 if config['enforce-distinct-rir-regions'] else 0}\"")
-
-        # Store the secret key for the vantage points hash in an environment variable.
-        hash_secret = ''.join(secrets.choice(string.ascii_letters) for i in range(20))
-        main_tf_string = main_tf_string.replace("{{hash-secret}}", f"\"{hash_secret}\"")
-        
-        # Set the source path for the lambda functions.
-        main_tf_string = main_tf_string.replace("{{source-path}}", f"{config['source-path']}")
-
-        # Derive the out file from the input file name.
-        if not args.main_tf_template.endswith(".tf.template"):
-            print(f"Error: invalid tf template name: {args.main_tf_template}. Make sure all tf template files end in '.tf.template'.")
-            exit()
-        
-        out_file_name = f"{'.'.join(args.main_tf_template.split('.')[:-2])}.generated.tf"
-
-        with open(out_file_name, 'w') as out_stream:
-            out_stream.write(main_tf_string)
 
 
         

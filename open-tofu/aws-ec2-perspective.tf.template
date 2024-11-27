@@ -1,25 +1,65 @@
-resource "aws_security_group" "ingress-standard-{{region}}" {
+resource "aws_security_group" "open-mpic-standard-{{region}}" {
     provider = aws.{{region}}
-    name = "allow-all-sg-{{deployment-id}}-{{region}}"
-    ingress {
+    name = "open-mpic-{{deployment-id}}-{{region}}"
+    /*ingress {
         cidr_blocks = [
             "0.0.0.0/0"
         ]
-        // TODO: open only kubernetes ports
-        from_port = 0
-        to_port = 0
-        protocol = "-1"
-        //from_port = 22
-        //to_port = 22
-        //protocol = "tcp"
+        
+        //from_port = 0
+        //to_port = 0
+        //protocol = "-1"
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
     }// Terraform removes the default rule
     egress {
         from_port = 0
         to_port = 0
         protocol = "-1"
         cidr_blocks = ["0.0.0.0/0"]
-    }
+    }*/
  }
+
+
+
+resource "aws_vpc_security_group_ingress_rule" "allow_tls_ipv4-{{region}}" {
+  provider = aws.{{region}}
+  security_group_id = aws_security_group.open-mpic-standard-{{region}}.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  ip_protocol       = "tcp"
+  to_port           = 443
+}
+
+
+resource "aws_vpc_security_group_ingress_rule" "allow_ssh_ipv4-{{region}}" {
+  provider = aws.{{region}}
+  security_group_id = aws_security_group.open-mpic-standard-{{region}}.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 22
+  ip_protocol       = "tcp"
+  to_port           = 22
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_http_ipv4-{{region}}" {
+  provider = aws.{{region}}
+  security_group_id = aws_security_group.open-mpic-standard-{{region}}.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 80
+  ip_protocol       = "tcp"
+  to_port           = 80
+}
+
+
+resource "aws_vpc_security_group_egress_rule" "allow_all_traffic_ipv4-{{region}}" {
+  provider = aws.{{region}}
+  security_group_id = aws_security_group.open-mpic-standard-{{region}}.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1" # semantically equivalent to all ports
+}
+
+
 
 
 
@@ -28,7 +68,7 @@ resource "aws_instance" "perspective_{{region}}" {
   instance_type = "t3.medium"
   user_data     = local.aws_user_data_template
   provider = aws.{{region}}
-  security_groups = ["${aws_security_group.ingress-standard-{{region}}.name}"]
+  security_groups = ["${aws_security_group.open-mpic-standard-{{region}}.name}"]
   tags = {
     Name = "{{deployment-id}}-{{region}}"
   }
