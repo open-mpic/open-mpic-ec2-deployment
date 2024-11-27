@@ -1,0 +1,35 @@
+resource "aws_security_group" "ingress-standard-{{region}}" {
+    provider = aws.{{region}}
+    name = "allow-all-sg-{{deployment-id}}-{{region}}"
+    ingress {
+        cidr_blocks = [
+            "0.0.0.0/0"
+        ]
+        // TODO: open only kubernetes ports
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        //from_port = 22
+        //to_port = 22
+        //protocol = "tcp"
+    }// Terraform removes the default rule
+    egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+ }
+
+
+
+resource "aws_instance" "perspective_{{region}}" {
+  ami           = "{{ami}}"
+  instance_type = "t3.medium"
+  user_data     = local.aws_user_data_template
+  provider = aws.{{region}}
+  security_groups = ["${aws_security_group.ingress-standard-{{region}}.name}"]
+  tags = {
+    Name = "{{deployment-id}}-{{region}}"
+  }
+}

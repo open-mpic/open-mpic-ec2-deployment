@@ -1,4 +1,4 @@
-aws_available_regions:
+available_regions:
   -
     code: "af-south-1"
     name: "Africa (Cape Town)"

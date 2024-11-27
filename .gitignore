@@ -1,6 +1,10 @@
+
+deployment.id
 keys/
 tmp/
 config.yaml
+
+*.generated.tf
 
 open-tofu/.terraform/
 *.tfstate

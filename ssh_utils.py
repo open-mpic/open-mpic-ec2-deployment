@@ -9,6 +9,19 @@ import datetime
 import threading
 import subprocess
 import os
+import pprint
+
+import get_ips
+
+def parse_args(raw_args):
+    parser = argparse.ArgumentParser()
+    dirname = os.path.dirname(os.path.realpath(__file__))
+    parser.add_argument('cmd')
+    parser.add_argument("-f", "--tf_state",
+                        default=f"{dirname}/open-tofu/terraform.tfstate")
+    parser.add_argument("-i", "--identity_file",
+                        default=f"{dirname}/keys/aws.pem")
+    return parser.parse_args(raw_args)
 
 def get_current_human_time():
 	value = datetime.datetime.fromtimestamp(time.time())
@@ -82,3 +95,18 @@ def copy_file_to_remotes(remote_ips, local_path, remote_path, keyfile):
 	for t in thread_list:
 		t.join()
 	return cmd_results
+
+def main(raw_args=None):
+	args = parse_args(raw_args)
+	remotes = get_ips.extract_ips(args.tf_state)
+	ips = [ip for ip in remotes]
+	res = run_cmd_at_remotes(ips, args.identity_file, args.cmd)
+	pprint.pp(res)
+	
+
+# Main module init for direct invocation. 
+if __name__ == '__main__':
+    main()
+	
+
+

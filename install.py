@@ -4,6 +4,7 @@ import argparse
 import os
 import json
 import pprint
+import yaml
 
 import get_ips
 import ssh_utils
@@ -13,13 +14,21 @@ import time
 def parse_args(raw_args):
     parser = argparse.ArgumentParser()
     dirname = os.path.dirname(os.path.realpath(__file__))
-
-    parser.add_argument("-t", "--tf_state",
+    parser.add_argument("-c", "--config",
+                        default=f"{dirname}/config.yaml")
+    parser.add_argument("-a", "--aws_region_config",
+                        default=f"{dirname}/aws_region_config.yaml")
+    parser.add_argument("-f", "--tf_state",
                         default=f"{dirname}/open-tofu/terraform.tfstate")
     parser.add_argument("-i", "--identity_file",
                         default=f"{dirname}/keys/aws.pem")
+    parser.add_argument("-d", "--docker_compose_template_file",
+                        default=f"{dirname}/compose.yaml.template")
+    parser.add_argument("-n", "--nginx_template_file",
+                        default=f"{dirname}/mpic-site.conf.template")
     parser.add_argument("-t", "--tmp_dir",
                         default=f"{dirname}/tmp")
+    parser.add_argument("-s", "--dns_suffix")
     return parser.parse_args(raw_args)
 
 
@@ -29,13 +38,35 @@ def parse_args(raw_args):
 def main(raw_args=None):
     args = parse_args(raw_args)
 
+
+    config = {}
+    with open(args.config) as stream:
+        try:
+            config = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(f"Error loading YAML config at {args.config}. Project not configured. Error details: {exec}.")
+            exit()
+
+    aws_region_config = {}
+    with open(args.aws_region_config) as stream:
+        try:
+            aws_region_config = yaml.safe_load(stream)['available_regions']
+        except yaml.YAMLError as exc:
+            print(f"Error loading YAML config at {args.aws_region_config}. Project not configured. Error details: {exec}.")
+            exit()
+
     remotes = get_ips.extract_ips(args.tf_state)
-    ls_results = ssh_utils.run_cmd_at_remotes(remotes.values(), args.identity_file, "ls")
+
+    for ip in remotes:
+        remotes[ip]['dns'] = ip.replace(".", "-") + "." + args.dns_suffix
+
+    ips = [ip for ip in remotes]
+    ls_results = ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "ls")
     startup_script_complete = False
     while not startup_script_complete:
         all_nodes_startup_script_done = True
         for ls_result in ls_results.values():
-            if "done.text" not in ls_result:
+            if "done.txt" not in ls_result:
                 all_nodes_startup_script_done = False
                 break
         if all_nodes_startup_script_done:
@@ -43,11 +74,92 @@ def main(raw_args=None):
             break
         print("Startup script not done... Sleeping 5 sec.")
         time.sleep(5)
+    print("Startup scripts done. Home dir at remote nodes.")
+    pprint.pp(ls_results)
 
     if not os.path.isdir(args.tmp_dir):
         os.mkdir(args.tmp_dir)
+
+
+    # Install nginx
+    #ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo apt install -y nginx")
+
+    # Disable default site.
+    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo rm /etc/nginx/sites-enabled/default")
     
 
+
+
+    with open(args.nginx_template_file) as stream:
+        nginx_template_string = stream.read()
+        for ip in remotes:
+            nginx_template_string_region = nginx_template_string[:]
+            nginx_template_string_region = nginx_template_string_region.replace("{{public-dns}}", remotes[ip]['dns'])
+            conf_file_path = args.tmp_dir + f"/mpic-site-{remotes[ip]['dns']}.conf"
+            with open(conf_file_path, 'w') as conf_file:
+                conf_file.write(nginx_template_string_region)
+            ssh_utils.copy_file_to_remote(conf_file_path, "/home/ubuntu/mpic-site.conf", ip, args.identity_file)
+
+    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo cp /home/ubuntu/mpic-site.conf /etc/nginx/sites-available/mpic-site.conf")
+    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo ln -s /etc/nginx/sites-available/mpic-site.conf /etc/nginx/sites-enabled/mpic-site.conf")
+
+    pprint.pp(ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo snap install --classic certbot"))
+
+    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo ln -s /snap/bin/certbot /usr/bin/certbot")
+    
+
+    for ip in remotes:
+        ssh_utils.run_cmd_at_remote(ip, args.identity_file, f"sudo certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email -d {remotes[ip]['dns']}")
+
+
+    with open(args.docker_compose_template_file) as stream:
+        # Read the template file to a string.
+        docker_compose_template = stream.read()
+
+        perspectives = config['perspectives']
+
+        dcv_endpoints = []
+        caa_endpoints = []
+
+        perspective_names = "|".join(perspectives)
+        for perspective in perspectives:
+            domain = [remotes[ip]['dns'] for ip in remotes if remotes[ip]['region'] == perspective][0]
+            dcv_endpoints.append({"url": f"https://{domain}/dcv"})
+            caa_endpoints.append({"url": f"https://{domain}/caa"})
+        
+        dcv_endpoints_json = json.dumps(dcv_endpoints)
+        caa_endpoints_json = json.dumps(caa_endpoints)
+
+        for ip in remotes:
+            docker_compose_template_string_region = docker_compose_template[:]
+
+            docker_compose_template_string_region = docker_compose_template_string_region.replace("{{perspective-names}}", perspective_names)
+            docker_compose_template_string_region = docker_compose_template_string_region.replace("{{dcv-remotes-json}}", dcv_endpoints_json)
+            docker_compose_template_string_region = docker_compose_template_string_region.replace("{{caa-remotes-json}}", caa_endpoints_json)
+            docker_compose_template_string_region = docker_compose_template_string_region.replace("{{default-perspective-count}}", str(config['default-perspective-count']))
+
+            docker_compose_template_string_region = docker_compose_template_string_region.replace("{{enforce-distinct-rir-regions}}", "1" if config['enforce-distinct-rir-regions'] else "0")
+            
+            docker_compose_template_string_region = docker_compose_template_string_region.replace("{{default-caa-domains}}", "|".join(config['caa-domains']))
+            
+            docker_compose_template_string_region = docker_compose_template_string_region.replace("{{code}}", remotes[ip]['region'])
+            
+            rir = [region['rir'] for region in aws_region_config if region['code'] == remotes[ip]['region']][0]
+
+            docker_compose_template_string_region = docker_compose_template_string_region.replace("{{rir}}", rir)
+            
+            # Replace absolout max attempt count if present.
+            if "absolute-max-attempts" in config:
+                docker_compose_template_string_region = docker_compose_template_string_region.replace("{{absoloute-max-attempts-key}}", f"absolute_max_attempts: \"{config['absolute-max-attempts']}\"")
+            else:
+                docker_compose_template_string_region = docker_compose_template_string_region.replace("{{absoloute-max-attempts-key}}", "")
+            filename = args.tmp_dir + "/compose." + ip + ".yaml"
+            with open(filename, 'w') as f:
+                f.write(docker_compose_template_string_region)
+            ssh_utils.copy_file_to_remote(filename, "/home/ubuntu/compose.yaml", ip, args.identity_file)
+    ssh_utils.copy_file_to_remotes(ips, args.aws_region_config, "/home/ubuntu/available_perspectives.yaml", args.identity_file)
+    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo docker compose up -d")
+    ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo service nginx reload")
 
 
 # Invoke this script after provisioning via open-tofu to print the API's url.
