@@ -12,7 +12,8 @@ def parse_args(raw_args):
 
     parser.add_argument("-t", "--tf_state",
                         default=f"{dirname}/open-tofu/terraform.tfstate")
-    parser.add_argument("-s", "--dns_suffix", default="")
+    parser.add_argument("-x", "--dns_suffix_file", 
+                        default=f"{dirname}/dns-suffix.txt")
     return parser.parse_args(raw_args)
 
 
@@ -40,8 +41,11 @@ def extract_ips(tf_state_file_path):
 def main(raw_args=None):
     args = parse_args(raw_args)  # get the arguments object
     resources = extract_ips(args.tf_state)
+    dns_suffix = None
+    with open(args.dns_suffix_file) as f:
+        dns_suffix = f.read().strip()
     for ip in resources:
-        domain_name = ip.replace(".", "-") + "." + args.dns_suffix
+        domain_name = ip.replace(".", "-") + "." + dns_suffix
         print(f"domain name: {domain_name} IN A {ip}")
     #pprint.pp(extract_ips(args.tf_state))
 

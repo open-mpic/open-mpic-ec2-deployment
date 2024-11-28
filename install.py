@@ -23,6 +23,8 @@ def parse_args(raw_args):
                         default=f"{dirname}/aws_region_config.yaml")
     parser.add_argument("-k", "--api_key_file",
                         default=f"{dirname}/keys/api.key")
+    parser.add_argument("-j", "--hash_secret_file",
+                        default=f"{dirname}/keys/hash-secret.txt")
     parser.add_argument("-f", "--tf_state",
                         default=f"{dirname}/open-tofu/terraform.tfstate")
     parser.add_argument("-i", "--identity_file",
@@ -33,7 +35,8 @@ def parse_args(raw_args):
                         default=f"{dirname}/mpic-site.conf.template")
     parser.add_argument("-t", "--tmp_dir",
                         default=f"{dirname}/tmp")
-    parser.add_argument("-s", "--dns_suffix")
+    parser.add_argument("-x", "--dns_suffix_file",
+                        default=f"{dirname}/dns-suffix.txt")
     return parser.parse_args(raw_args)
 
 
@@ -43,7 +46,14 @@ def parse_args(raw_args):
 def main(raw_args=None):
     args = parse_args(raw_args)
 
+    dns_suffix = None
+    with open(args.dns_suffix_file) as f:
+        dns_suffix = f.read().strip()
 
+    hash_secret = None
+    with open(args.hash_secret_file) as f:
+        hash_secret = f.read().strip()
+    
     config = {}
     with open(args.config) as stream:
         try:
@@ -67,7 +77,7 @@ def main(raw_args=None):
     remotes = get_ips.extract_ips(args.tf_state)
 
     for ip in remotes:
-        remotes[ip]['dns'] = ip.replace(".", "-") + "." + args.dns_suffix
+        remotes[ip]['dns'] = ip.replace(".", "-") + "." + dns_suffix
 
     ips = [ip for ip in remotes]
     ls_results = ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "ls")
@@ -120,7 +130,8 @@ def main(raw_args=None):
     cmds = []
     for ip in ips:
         cmds.append(f"sudo certbot --nginx --non-interactive --agree-tos --register-unsafely-without-email -d {remotes[ip]['dns']}")
-    ssh_utils.run_cmds_at_remotes(ips, args.identity_file, cmds)
+    
+    pprint.pp(ssh_utils.run_cmds_at_remotes(ips, args.identity_file, cmds))
 
 
     with open(args.docker_compose_template_file) as stream:
@@ -129,14 +140,14 @@ def main(raw_args=None):
 
         perspectives = config['perspectives']
 
-        dcv_endpoints = []
-        caa_endpoints = []
+        dcv_endpoints = {}
+        caa_endpoints = {}
 
         perspective_names = "|".join(perspectives)
         for perspective in perspectives:
             domain = [remotes[ip]['dns'] for ip in remotes if remotes[ip]['region'] == perspective][0]
-            dcv_endpoints.append([{"url": f"https://{domain}/dcv", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}}])
-            caa_endpoints.append([{"url": f"https://{domain}/caa", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}}])
+            dcv_endpoints[perspective] = [{"url": f"https://{domain}/dcv", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}}]
+            caa_endpoints[perspective] = [{"url": f"https://{domain}/caa", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}}]
         
         dcv_endpoints_json = json.dumps(dcv_endpoints)
         caa_endpoints_json = json.dumps(caa_endpoints)
@@ -145,6 +156,8 @@ def main(raw_args=None):
         for ip in remotes:
             docker_compose_template_string_region = docker_compose_template[:]
 
+            docker_compose_template_string_region = docker_compose_template_string_region.replace("{{hash-secret}}", hash_secret)
+            
             docker_compose_template_string_region = docker_compose_template_string_region.replace("{{perspective-names}}", perspective_names)
             docker_compose_template_string_region = docker_compose_template_string_region.replace("{{dcv-remotes-json}}", dcv_endpoints_json)
             docker_compose_template_string_region = docker_compose_template_string_region.replace("{{caa-remotes-json}}", caa_endpoints_json)

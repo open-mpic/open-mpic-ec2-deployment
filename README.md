@@ -1,20 +1,13 @@
 # open-mpic-ec2-deployment
 Deployment scripts for Open MPIC using Fast API, Docker, and Nginx
 
-# Key generation
-`mkdir keys`
-
-`cd keys`
-
-Key file must be named aws.pem
-`ssh-keygen -t rsa -b 4096 -f aws.pem`
-
-`chmod 700 aws.pem`
-
-`cd ..`
 
 # Config
 `cp config.example.yaml config.yaml`
+
+
+Pick a domain name sufix at the prompt that you control which you can use to allocate subdomains to perspectives.
+`./configure.py`
 
 # Tofu apply
 `cd open-tofu`
@@ -24,16 +17,16 @@ Key file must be named aws.pem
 `cd ..`
 
 # Update domain names
-Pick a domain name sufix that you control which you can use to allocate subdomains to perspectives.
 
-`./get_ips.py -s mpic.example.com`
+
+`./get_ips.py`
 
 Assign the proided ips to the different sudomains using DNS. Wiat for records to propagate before continuing to next step.
 
 
 # Install
 
-`./install.py -s mpic.example.com`
+`./install.py`
 
 # Run Open MPIC
 

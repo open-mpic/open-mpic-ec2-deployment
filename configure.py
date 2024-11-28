@@ -5,6 +5,7 @@ import os
 import yaml
 import secrets
 import string
+import subprocess
 
 
 def parse_args(raw_args):
@@ -21,12 +22,18 @@ def parse_args(raw_args):
                         default=f"{dirname}/open-tofu/aws-ec2-perspective.tf.template")
     parser.add_argument("-k", "--api_key_file",
                         default=f"{dirname}/keys/api.key")
+    parser.add_argument("-j", "--hash_secret_file",
+                        default=f"{dirname}/keys/hash-secret.txt")
     parser.add_argument("-p", "--aws_provider_tf_template",
                         default=f"{dirname}/open-tofu/aws-provider.tf.template")
     parser.add_argument("-d", "--deployment_id_file",
                         default=f"{dirname}/deployment.id")
     parser.add_argument("-i", "--ami_info",
                         default=f"{dirname}/ami-info.txt")
+    parser.add_argument("-s", "--dns_suffix",
+                        default=f"")
+    parser.add_argument("-x", "--dns_suffix_file",
+                        default=f"{dirname}/dns-suffix.txt")
     return parser.parse_args(raw_args)
 
 
@@ -34,6 +41,32 @@ def parse_args(raw_args):
 def main(raw_args=None):
     # Get the arguments object.
     args = parse_args(raw_args)
+
+
+    # Make keys dir
+    dirname = os.path.dirname(os.path.realpath(__file__))
+    if not os.path.isdir(f"{dirname}/keys"):
+        print("Making keys dir")
+        os.makedirs(f"{dirname}/keys")
+    
+    if not os.path.isdir(f"{dirname}/tmp"):
+        print("Making tmp dir")
+        os.makedirs(f"{dirname}/tmp")
+
+    if not os.path.isfile(f"{dirname}/keys/aws.pem.pub") or not os.path.isfile(f"{dirname}/keys/aws.pem"):
+        print("Generating aws ssh key.")
+        subprocess.run(["bash", "-c", "cd keys; ssh-keygen -t rsa -b 4096 -f aws.pem -N \"\"; chmod 700 aws.pem; cd .."]) 
+
+
+    if args.dns_suffix != "":
+        with open(args.dns_suffix_file, 'w') as stream:
+            stream.write(args.dns_suffix)
+    
+    if not os.path.isfile(args.dns_suffix_file):
+        print("Please provide a dns suffix. This should be a domain name you control which you can easily add A records to.")
+        dns_suffix = input('--> ')
+        with open(args.dns_suffix_file, 'w') as stream:
+            stream.write(dns_suffix)
 
     # If the deployment id file does not exist, make a new one.
     if not os.path.isfile(args.deployment_id_file):
@@ -130,12 +163,19 @@ def main(raw_args=None):
                 out_stream.write(aws_perspective_tf_region)
 
 
-    # Get API Key
-        
+    
+
+    # Save API Key
     if not os.path.isfile(args.api_key_file):
         with open(args.api_key_file, 'w') as f:
             api_key_generated = ''.join(secrets.choice(string.ascii_letters) for i in range(30))
             f.write(api_key_generated)
+
+    # Save hash secret Key
+    if not os.path.isfile(args.hash_secret_file):
+        with open(args.hash_secret_file, 'w') as f:
+            hash_secret_generated = ''.join(secrets.choice(string.ascii_letters) for i in range(30))
+            f.write(hash_secret_generated)
 
     return
 

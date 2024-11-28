@@ -1,7 +1,7 @@
 services:
   fastapi-coordinator:
     build:
-      context: "open-mpic-fastapi-docker/coordinator"
+      context: "open-mpic-containers/coordinator"
     restart: always
     environment:
       perspective_names: "{{perspective-names}}"
@@ -9,7 +9,7 @@ services:
       caa_remotes: '{{caa-remotes-json}}'
       default_perspective_count: "{{default-perspective-count}}"
       enforce_distinct_rir_regions: "{{enforce-distinct-rir-regions}}"
-      hash_secret: "{{hash_secret}}"
+      hash_secret: "{{hash-secret}}"
       {{absoloute-max-attempts-key}}
     ports:
     - "127.0.0.1:8080:80/tcp"
@@ -17,7 +17,7 @@ services:
       - ./available_perspectives.yaml:/code/available_perspectives.yaml
   fastapi-dcv:
     build:
-      context: "open-mpic-fastapi-docker/dcv"
+      context: "open-mpic-containers/dcv"
     restart: always
     environment:
       rir_region: "{{rir}}"
@@ -26,7 +26,7 @@ services:
     - "127.0.0.1:8081:80/tcp"
   fastapi-caa:
     build:
-      context: "open-mpic-fastapi-docker/caa"
+      context: "open-mpic-containers/caa"
     restart: always
     environment:
       rir_region: "{{rir}}"
