@@ -6,6 +6,7 @@ echo -e "${key}" >> /home/ubuntu/.ssh/authorized_keys
 
 
 apt update
+apt upgrade
 apt install -y git
 
 apt install -y nginx
@@ -33,3 +34,5 @@ git clone --recurse-submodules https://github.com/open-mpic/open-mpic-containers
 
 
 echo "done" >> /home/ubuntu/done.txt
+
+shutdown -r now

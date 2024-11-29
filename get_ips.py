@@ -17,8 +17,7 @@ def parse_args(raw_args):
     return parser.parse_args(raw_args)
 
 
-def extract_ips(tf_state_file_path):
-    
+def extract_ips(tf_state_file_path, dns_suffix):
 
     instance_data = {}
 
@@ -27,26 +26,35 @@ def extract_ips(tf_state_file_path):
         resources = tfstate['resources']
         for resource in resources:
             resource_type = resource['type']
-            if resource_type == "aws_instance":
+            if resource_type == "aws_eip":
                 name = resource['name']
-                if not name.startswith("perspective_"):
+                if not name.startswith("eip__"):
                     continue
-                region = name[12:]
+                name_split = name.split("__")
+                if len(name_split) < 4:
+                    continue
+                endpoint_number = name_split[1]
+                region = name_split[2]
+                deployment_id = name_split[3]
                 instance = resource['instances'][0]
-                instance_data[instance['attributes']['public_ip']] = {"dns": None, "region": region}
+                instance_data[instance['attributes']['public_ip']] = {"dns": endpoint_number + "." + region + "." + dns_suffix, "region": region}
     return instance_data
 
 
 # Main function. Optional raw_args array for specifying command line arguments in calls from other python scripts. If raw_args=none, argparse will get the arguments from the command line.
 def main(raw_args=None):
+    
     args = parse_args(raw_args)  # get the arguments object
-    resources = extract_ips(args.tf_state)
+
     dns_suffix = None
     with open(args.dns_suffix_file) as f:
         dns_suffix = f.read().strip()
+    resources = extract_ips(args.tf_state, dns_suffix)
+    
     for ip in resources:
-        domain_name = ip.replace(".", "-") + "." + dns_suffix
-        print(f"domain name: {domain_name} IN A {ip}")
+        print(f"----region: {resources[ip]['region']}")
+        print(f"domain name: {resources[ip]['dns']}. IN A {ip}")
+        print()
     #pprint.pp(extract_ips(args.tf_state))
 
 # Invoke this script after provisioning via open-tofu to print the API's url.

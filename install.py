@@ -74,10 +74,7 @@ def main(raw_args=None):
     with open(args.api_key_file) as f:
         api_key = f.read().strip()
     
-    remotes = get_ips.extract_ips(args.tf_state)
-
-    for ip in remotes:
-        remotes[ip]['dns'] = ip.replace(".", "-") + "." + dns_suffix
+    remotes = get_ips.extract_ips(args.tf_state, dns_suffix)
 
     ips = [ip for ip in remotes]
     ls_results = ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "ls")
@@ -106,7 +103,11 @@ def main(raw_args=None):
     # Disable default site.
     ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo rm /etc/nginx/sites-enabled/default")
     
-
+    # Increase host hash bucket size to allow for long hostnames.
+    #ssh_utils.run_cmd_at_remotes(ips, args.identity_file, "sudo sed -i '/server_names_hash_bucket_size/c\server_names_hash_bucket_size 128;' /etc/nginx/nginx.conf")
+    
+    
+    
 
 
     with open(args.nginx_template_file) as stream:
