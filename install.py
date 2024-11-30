@@ -146,9 +146,9 @@ def main(raw_args=None):
 
         perspective_names = "|".join(perspectives)
         for perspective in perspectives:
-            domain = [remotes[ip]['dns'] for ip in remotes if remotes[ip]['region'] == perspective][0]
-            dcv_endpoints[perspective] = [{"url": f"https://{domain}/dcv", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}}]
-            caa_endpoints[perspective] = [{"url": f"https://{domain}/caa", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}}]
+            domains = [remotes[ip]['dns'] for ip in remotes if remotes[ip]['region'] == perspective]
+            dcv_endpoints[perspective] = [{"url": f"https://{domain}/dcv", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}} for domain in domains]
+            caa_endpoints[perspective] = [{"url": f"https://{domain}/caa", "headers": {"x-api-key": api_key, "Content-Type": "application/json"}} for domain in domains]
         
         dcv_endpoints_json = json.dumps(dcv_endpoints)
         caa_endpoints_json = json.dumps(caa_endpoints)

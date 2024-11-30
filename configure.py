@@ -18,8 +18,10 @@ def parse_args(raw_args):
                         default=f"{dirname}/aws-available-regions.yaml")
     parser.add_argument("-m", "--main_tf_template",
                         default=f"{dirname}/open-tofu/main.tf.template")
-    parser.add_argument("-a", "--aws_perspective_tf_template",
-                        default=f"{dirname}/open-tofu/aws-ec2-perspective.tf.template")
+    parser.add_argument("-a", "--aws_instance_tf_template",
+                        default=f"{dirname}/open-tofu/aws-ec2-instance.tf.template")
+    parser.add_argument("-b", "--aws_region_tf_template",
+                        default=f"{dirname}/open-tofu/aws-ec2-region.tf.template")
     parser.add_argument("-k", "--api_key_file",
                         default=f"{dirname}/keys/api.key")
     parser.add_argument("-j", "--hash_secret_file",
@@ -96,7 +98,7 @@ def main(raw_args=None):
             exit()
 
     # Remove all old files.
-    open_tofu_dir = '/'.join(args.aws_perspective_tf_template.split('/')[:-1])
+    open_tofu_dir = '/'.join(args.aws_region_tf_template.split('/')[:-1])
     for file in os.listdir(open_tofu_dir):
         if file.endswith(".generated.tf"):
             os.remove(os.path.join(open_tofu_dir, file))
@@ -139,7 +141,7 @@ def main(raw_args=None):
 
 
     # Generate aws-perspective-template.generated.tf based on aws-perspective-template.tf.template.
-    with open(args.aws_perspective_tf_template) as stream:
+    with open(args.aws_region_tf_template) as stream:
         # Read the template file to a string.
         aws_perspective_tf = stream.read()
 
@@ -148,19 +150,37 @@ def main(raw_args=None):
             region = perspective
 
             aws_perspective_tf_region = aws_perspective_tf.replace("{{region}}", region)
-            
+
+                
+
             # Replace the deployment id.
             aws_perspective_tf_region = aws_perspective_tf_region.replace("{{deployment-id}}", str(deployment_id))
-            
+
             aws_perspective_tf_region = aws_perspective_tf_region.replace("{{ami}}", ami_info_dict[region])
 
-            if not args.aws_perspective_tf_template.endswith(".tf.template"):
-                print(f"Error: invalid tf template name: {args.aws_perspective_tf_template}. Make sure all tf template files end in '.tf.template'.")
+            if not args.aws_region_tf_template.endswith(".tf.template"):
+                print(f"Error: invalid tf template name: {args.aws_region_tf_template}. Make sure all tf template files end in '.tf.template'.")
                 exit()
-            out_file_name = f"{'.'.join(args.aws_perspective_tf_template.split('.')[:-2])}.{region}.generated.tf"
+            out_file_name = f"{'.'.join(args.aws_region_tf_template.split('.')[:-2])}.{region}.generated.tf"
 
             with open(out_file_name, 'w') as out_stream:
                 out_stream.write(aws_perspective_tf_region)
+            
+            with open(args.aws_instance_tf_template) as instance_file:
+                instance_file_contents = instance_file.read()
+                for instance_number in range(config['instances-per-region']):
+                    aws_instance_tf = instance_file_contents.replace("{{instance-number}}", str(instance_number))
+                    aws_instance_tf = aws_instance_tf.replace("{{deployment-id}}", str(deployment_id))
+                    aws_instance_tf = aws_instance_tf.replace("{{region}}", region)
+                    aws_instance_tf = aws_instance_tf.replace("{{ami}}", ami_info_dict[region])
+
+                    if not args.aws_instance_tf_template.endswith(".tf.template"):
+                        print(f"Error: invalid tf template name: {args.aws_instance_tf_template}. Make sure all tf template files end in '.tf.template'.")
+                        exit()
+                    instance_out_file_name = f"{'.'.join(args.aws_instance_tf_template.split('.')[:-2])}.{instance_number}.{region}.generated.tf"
+
+                    with open(instance_out_file_name, 'w') as out_stream:
+                        out_stream.write(aws_instance_tf)
 
 
     
